@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carimbador de O.S.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen flex flex-col justify-between text-slate-800">
+
+    <header class="bg-white border-b border-slate-200 py-4 px-6 sticky top-0 z-50">
+        <div class="max-w-5xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-red-500 text-white p-2 rounded-lg shadow-sm">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight text-slate-900">Sistema de Concluir O.S</h1>
+                    <p class="text-xs text-slate-500">Carimbo e formatação automática de ordens</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-3 text-xs font-medium">
+                <div class="bg-slate-100 border border-slate-200 px-3 py-1.5 rounded-full text-slate-700">
+                    Coordenação: <span class="text-slate-900 font-bold">{{ session['coordenacao'] }}</span>
+                </div>
+                <a href="/logout" class="text-slate-400 hover:text-red-500 transition-colors">Sair</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-xl w-full mx-auto p-6 flex-grow flex flex-col justify-center">
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, message in messages %}
+              <div class="mb-4 p-4 rounded-xl border {% if category == 'erro' %} bg-red-50 border-red-200 text-red-700 {% else %} bg-blue-50 border-blue-200 text-blue-700 {% endif %} text-sm">
+                {{ message }}
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
+
+        <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-8">
+            <h2 class="text-xl font-semibold text-slate-900 mb-2">Enviar Ordens de Serviço</h2>
+            <p class="text-sm text-slate-500 mb-6">Arraste e solte seus PDFs na área abaixo ou clique para selecionar.</p>
+
+            <form action="/" method="POST" enctype="multipart/form-data" id="upload-form">
+                
+                <label for="arquivos" id="drop-zone" class="flex flex-col items-center justify-center w-full h-48 border-2 border-slate-300 border-dashed rounded-xl cursor-pointer bg-slate-50 hover:bg-slate-100/70 hover:border-slate-400 transition-all duration-200 group">
+                    <div class="flex flex-col items-center justify-center pt-5 pb-6 px-4 text-center pointer-events-none">
+                        <svg class="w-10 h-10 text-slate-400 group-hover:text-slate-500 mb-3 transition-colors" id="drop-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                        </svg>
+                        <p class="mb-1 text-sm text-slate-700 font-medium" id="drop-text">Arraste os PDFs aqui ou clique para selecionar</p>
+                        <p class="text-xs text-slate-400">Suporta múltiplos documentos em formato PDF</p>
+                    </div>
+                    <input id="arquivos" name="arquivos" type="file" class="hidden" multiple accept=".pdf" onchange="atualizarContador(this)"/>
+                </label>
+
+                <div id="file-counter" class="hidden mt-3 text-xs text-slate-500 font-medium bg-slate-100 py-2 px-3 rounded-lg flex items-center justify-between">
+                    <span id="counter-text">0 arquivos selecionados</span>
+                    <button type="button" onclick="limparInput()" class="text-red-500 hover:text-red-700">Remover</button>
+                </div>
+
+                <button type="submit" class="mt-6 w-full bg-slate-900 hover:bg-slate-800 text-white font-medium py-3 px-4 rounded-xl shadow-sm transition-colors flex items-center justify-center space-x-2">
+                    Processar Ordens
+                </button>
+            </form>
+        </div>
+    </main>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('arquivos');
+        const dropText = document.getElementById('drop-text');
+
+        // Impede o comportamento padrão do navegador (abrir o PDF na aba)
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, e => e.preventDefault());
+        });
+
+        // Efeito visual ao arrastar o arquivo sobre a área pontilhada
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.add('border-slate-500', 'bg-slate-200/80');
+                dropText.textContent = "Pode soltar os arquivos aqui!";
+            });
+        });
+
+        // Remove o efeito visual quando o arquivo sai da área
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => {
+                dropZone.classList.remove('border-slate-500', 'bg-slate-200/80');
+                dropText.textContent = "Arraste os PDFs aqui ou clique para selecionar";
+            });
+        });
+
+        // Captura os arquivos quando são soltos na área pontilhada
+        dropZone.addEventListener('drop', (e) => {
+            const dt = e.dataTransfer;
+            const arquivos = dt.files;
+
+            // Filtra e aceita apenas arquivos PDF
+            const dataTransferFiltrado = new DataTransfer();
+            for (let i = 0; i < arquivos.length; i++) {
+                if (arquivos[i].type === "application/pdf" || arquivos[i].name.toLowerCase().endswith('.pdf')) {
+                    dataTransferFiltrado.items.add(arquivos[i]);
+                }
+            }
+
+            // Injeta os arquivos arrastados diretamente no input escondido do formulário
+            fileInput.files = dataTransferFiltrado.files;
+            atualizarContador(fileInput);
+        });
+
+        // Atualiza o texto do contador na tela
+        function atualizarContador(input) {
+            const counterDiv = document.getElementById('file-counter');
+            const counterText = document.getElementById('counter-text');
+            
+            if (input.files.length > 0) {
+                counterDiv.classList.remove('hidden');
+                counterText.textContent = `${input.files.length} arquivo(s) selecionado(s) pronto(s) para processar.`;
+            } else {
+                counterDiv.classList.add('hidden');
+            }
+        }
+
+        // Limpa a seleção caso o usuário queira cancelar
+        function limparInput() {
+            fileInput.value = '';
+            document.getElementById('file-counter').classList.add('hidden');
+        }
+    </script>
+</body>
+</html>
