@@ -2,7 +2,7 @@ import os
 import re
 import io
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone, timedelta  # Modificado aqui
 from functools import wraps
 from flask import Flask, render_template, request, send_file, flash, redirect, url_for, session
 import fitz  # PyMuPDF
@@ -157,7 +157,11 @@ def index():
             return redirect(request.url)
 
         zip_buffer = io.BytesIO()
-        agora = datetime.now()
+
+        # Cria explicitamente o fuso horário de Brasília (UTC -3 horas)
+        fuso_brasilia = timezone(timedelta(hours=-3))
+        agora = datetime.now(fuso_brasilia)
+
         data_atual = agora.strftime("%d/%m/%Y")
         hora_atual = agora.strftime("%H:%M:%S")
         
