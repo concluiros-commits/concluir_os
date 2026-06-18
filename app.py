@@ -10,6 +10,9 @@ import fitz  # PyMuPDF
 app = Flask(__name__)
 app.secret_key = "chave_secreta_para_flash_messages"
 
+# Garante que a sessão expire assim que o usuário fechar o navegador
+app.config['SESSION_PERMANENT'] = False
+
 # Dicionário de tokens simples por coordenação
 TOKENS_COORDENACAO = {
     "BHS7K2": "BHS",
@@ -130,10 +133,16 @@ def login():
     if request.method == 'POST':
         token = request.form.get('token', '').strip()
         if token in TOKENS_COORDENACAO:
+            # Define que esta sessão específica não deve persistir no HD do usuário
+            session.permanent = False
             session['coordenacao'] = TOKENS_COORDENACAO[token]
             return redirect(url_for('index'))
         else:
             flash('Token inválido. Tente novamente.', 'erro')
+            
+    # Se o método for GET (quando ele entra na página ou dá refresh/F5 no login),
+    # limpamos a sessão antiga por segurança antes de desenhar a tela.
+    session.clear()
     return render_template('login.html')
 
 @app.route('/logout')
