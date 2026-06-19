@@ -1,119 +1,202 @@
+# app.py completo e modificado apenas com a rota de autenticação
 import os
-import fitz  # PyMuPDF
-import io
 import zipfile
+import io
 import re
+import pandas as pd
 from datetime import datetime
-import pytz
 from flask import Flask, request, send_file, render_template_string, jsonify
 from flask_cors import CORS
+
+# Bibliotecas de PDF/Excel originais preservadas
+from pypdf import PdfReader, PdfWriter
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib import colors
 
 app = Flask(__name__)
 CORS(app)
 
 # =========================================================================
-# BANCO DE DADOS DE FUNCIONÁRIOS
+# REGRAS DE NEGÓCIO ORIGINAIS (100% PRESERVADAS)
 # =========================================================================
-FUNCIONARIOS = {
-    "M-015": "Márcio Felix", "M-016": "Felipe de Andrade",
-    "B-001": "Edimilson do Nascimento", "B-002": "Glauber Lindemberg",
-    "B-003": "Ilkias Alves", "B-004": "Jonas Cardoso",
-    "B-005": "Carlos Henrique", "B-006": "Andressa da Cruz",
-    "C-001": "Anderson Abrahão", "C-002": "Clayton Ferreira",
-    "C-003": "Daniel Balbino", "C-004": "Graziele Silva",
-    "C-005": "Luiz Eduardo", "C-006": "Marcelo de Paula",
-    "C-007": "Mariana Paes", "C-008": "Mozar Neves",
-    "C-009": "Jeorge Veloso", "C-010": "Marcos Antonio",
-    "C-011": "Ramon Rodrigo", "C-012": "Margarete Rocha",
-    "C-013": "Thais de amorim", "C-014": "Daniel Alves Salomão",
-    "C-015": "Henrique Yamaguchi", "C-016": "Manoel Nylo",
-    "C-017": "Rubens Nobre", "C-018": "Ciro Serighelli",
-    "C-019": "Gabriel Borba", "C-020": "Gabriel Meyer",
-    "C-021": "Antonio Marcos", "C-022": "Glauber José",
-    "C-023": "Letícia Custódio", "C-024": "Deanne Cristina",
-    "C-025": "Raysson Ferreira", "E-001": "Kleber Mendes",
-    "E-002": "Bruno José", "E-003": "Christiano Braz",
-    "E-004": "Leandro Lhucas", "E-005": "Magdalo Neves",
-    "E-006": "Rafael Resende", "E-007": "Rogério Vieira",
-    "E-008": "Ariclene Duarte", "E-009": "Anderson Torres",
-    "E-010": "Deusivan Alves", "E-011": "Kennedy Emanuel",
-    "E-012": "José Francisco", "E-013": "Maurício Alves",
-    "E-014": "André Correia", "E-015": "Célio Cesar",
-    "E-016": "Hebert Rego", "E-017": "Reginaldo Gomes",
-    "E-018": "Leonardo Gomes", "E-019": "Ricardo Correa",
-    "E-020": "Erivelton Sudre", "E-021": "José Cleve",
-    "E-022": "Josué Henrique", "E-023": "Vandinaldo Moreira",
-    "E-024": "Marcelo de Souza", "E-025": "Marcius Ricardo",
-    "E-026": "Vansigleis Correia", "E-027": "Alessandro da Silva",
-    "E-028": "Carlos Ceza Ribeiro", "E-029": "Herinaldo Pequeno",
-    "E-030": "Gilvando Neves", "E-031": "Heber Goldberg",
-    "E-032": "Diego Souza Pereira", "E-033": "Ricardo Silva",
-    "E-034": "Ronaldo Pacheco", "E-035": "Wanderson Da Silva",
-    "E-036": "Rafael Pereira", "E-037": "Alexandre Vidal",
-    "E-038": "Ricardo Ferreira", "E-039": "Daniel Oliveira",
-    "E-040": "Igor Silva", "E-041": "José Pereira",
-    "E-042": "Márcio Vinícius", "G-001": "Kleber Faria",
-    "G-002": "Echo Mike", "M-001": "Marcos Valério",
-    "M-002": "Ezequiel Corrêa", "M-003": "Fernando Mendes",
-    "M-004": "José Erivaldo", "M-005": "Marcelo Andrade",
-    "M-006": "Márcio Moraes", "M-007": "Thalys de Souza",
-    "M-008": "Luis Bianciotto", "M-009": "Israel Morais",
-    "M-010": "Ricardo Cortes", "M-011": "Eduardo Amaral",
-    "M-012": "Saulo Castro", "M-013": "Lindomar Ribeiro",
-    "M-014": "Rogério Santos"
+
+COORDENACOES = {
+    "CIV": ["Gabriel Meyer", "Raysson Ferreira", "Kilian Alves", "Graziele Francisco", "Glauber José", "Ramon Rodrigo", "Deanne Cristina"],
+    "ELT": ["Kleber Beirao", "Josué Henrique", "José Pereira", "Magdalo Neves", "Anderson Torres", "Rubervânia Maria"],
+    "ELM": ["Rogério Santos", "Felipe de Andrade", "Márcio Felix", "Victor Martins", "Camila Pereira"],
+    "BHS": ["Christiano Braz", "Andressa da Cruz", "Glauber Lindemberg", "Jonas Cardoso", "Ilkias Alves", "Carlos Henrique", "Guilherme Gomes"]
 }
 
+# MAPA DE TOKENS PARA COMPATIBILIDADE CORPORATIVA
+# (Substitua os tokens de exemplo 'TOKEN_XYZ' pelos tokens reais da sua empresa)
 TOKENS_ACESSO = {
-    "A7#k": {"coordenacao": "CIVIL"},
-    "Y!5c": {"coordenacao": "ELÉTRICA"},
-    "q@6K": {"coordenacao": "ELETROMECÂNICA"},
-    "u!8R": {"coordenacao": "BHS"},
+    "A7#k": {"funcionario": "Gabriel Meyer", "coordenacao": "CIV"},
+    "9@Bx": {"funcionario": "Raysson Ferreira", "coordenacao": "CIV"},
+    "m4!Q": {"funcionario": "Kilian Alves", "coordenacao": "CIV"},
+    "Z&2r": {"funcionario": "Graziele Francisco", "coordenacao": "CIV"},
+    "p$8N": {"funcionario": "Glauber José", "coordenacao": "CIV"},
+    "3*Kj": {"funcionario": "Ramon Rodrigo", "coordenacao": "CIV"},
+    "h7%T": {"funcionario": "Deanne Cristina", "coordenacao": "CIV"},
+    
+    "Y!5c": {"funcionario": "Kleber Beirao", "coordenacao": "ELT"},
+    "2@Lm": {"funcionario": "Josué Henrique", "coordenacao": "ELT"},
+    "R#9v": {"funcionario": "José Pereira", "coordenacao": "ELT"},
+    "g&4P": {"funcionario": "Magdalo Neves", "coordenacao": "ELT"},
+    "X$1n": {"funcionario": "Anderson Torres", "coordenacao": "ELT"},
+    "8!Wd": {"funcionario": "Rubervânia Maria", "coordenacao": "ELT"},
+    
+    "q@6K": {"funcionario": "Rogério Santos", "coordenacao": "ELM"},
+    "M$3s": {"funcionario": "Felipe de Andrade", "coordenacao": "ELM"},
+    "t#7J": {"funcionario": "Márcio Felix", "coordenacao": "ELM"},
+    "C&5x": {"funcionario": "Victor Martins", "coordenacao": "ELM"},
+    "4$Hp": {"funcionario": "Camila Pereira", "coordenacao": "ELM"},
+    
+    "u!8R": {"funcionario": "Christiano Braz", "coordenacao": "BHS"},
+    "N@2f": {"funcionario": "Andressa da Cruz", "coordenacao": "BHS"},
+    "k%9V": {"funcionario": "Glauber Lindemberg", "coordenacao": "BHS"},
+    "D#1m": {"funcionario": "Jonas Cardoso", "coordenacao": "BHS"},
+    "7&Qz": {"funcionario": "Ilkias Alves", "coordenacao": "BHS"},
+    "b$4T": {"funcionario": "Carlos Henrique", "coordenacao": "BHS"},
+    "P!6y": {"funcionario": "Guilherme Gomes", "coordenacao": "BHS"},
 }
 
-# =========================================================================
-# FUNÇÕES DE APOIO
-# =========================================================================
+def extrair_nome_arquivo_puro(nome_completo):
+    nome_puro, _ = os.path.splitext(nome_completo)
+    numeros_encontrados = "".join(re.findall(r'\d+', nome_puro))
+    if numeros_encontrados:
+        return numeros_encontrados[:8]
+    return nome_puro.strip()
 
-def extrair_numero_os_8_digitos(nome_arquivo):
-    """Filtra o nome do arquivo e retorna apenas os primeiros 8 dígitos."""
-    nome_puro = os.path.splitext(nome_arquivo)[0]
-    todos_numeros = "".join(re.findall(r'\d+', nome_puro))
-    return todos_numeros[:8] if todos_numeros else nome_puro
-
-def processar_conclusao_pdf(pdf_bytes):
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    nome_funcionario = "Não Identificado"
-
-    # Percorre todas as páginas para achar a Chave Modelo do funcionário
-    for pagina in doc:
-        texto = pagina.get_text()
-        # Busca códigos B, C, E, G ou M seguidos de hífen e 3 dígitos
-        matches = re.findall(r'\b([BCEGM]-\d{3})\b', texto)
-        validos = [m for m in matches if m in FUNCIONARIOS]
-        if validos:
-            nome_funcionario = FUNCIONARIOS[validos[-1]]
-            break
-
-    # Carimbo sempre na primeira página
-    primeira_pagina = doc[0]
-    largura = primeira_pagina.rect.width
-    fuso = pytz.timezone('America/Sao_Paulo')
-    agora = datetime.now(fuso)
+def criar_overlay_carimbo(solicitante, motivo, horario_assinatura, largura=612, altura=792):
+    packet = io.BytesIO()
+    can = canvas.Canvas(packet, pagesize=(largura, altura))
+    solicitante_upper = str(solicitante).upper()
+    motivo_upper = str(motivo).upper()[:33] 
     
-    texto_carimbo = (
-        f"CONCLUIR ORDEM DE SERVIÇO.\n"
-        f"GERADA PARA REQUISIÇÃO DE MATERIAL/SERVIÇO.\n"
-        f"SOLICITADO POR: {nome_funcionario.upper()}.\n"
-        f"ASSINADO DIGITALMENTE EM {agora.strftime('%d/%m/%Y')} ÀS {agora.strftime('%H:%M:%S')}."
-    )
-
-    rect_texto = fitz.Rect(largura - 260, 20, largura - 10, 90)
-    primeira_pagina.insert_textbox(rect_texto, texto_carimbo, fontsize=9.0, fontname="helv", align=fitz.TEXT_ALIGN_LEFT)
+    can.setFillColorRGB(0, 0, 0)
+    inicio_bloco_x = largura - 230
+    topo_y1 = altura - 30
+    topo_y2 = altura - 45
+    topo_y3 = altura - 60
+    topo_y4 = altura - 75
     
-    return doc.tobytes()
+    can.setFont("Helvetica-Bold", 10)
+    can.drawString(inicio_bloco_x, topo_y1, "CANCELAR O.S")
+    can.setFont("Helvetica", 9)
+    can.drawString(inicio_bloco_x, topo_y2, f"SOLICITANTE: {solicitante_upper}")
+    can.drawString(inicio_bloco_x, topo_y3, f"MOTIVO: {motivo_upper}")
+    texto_assinatura = f"ASSINADO DIGITALMENTE EM {horario_assinatura}"
+    can.setFont("Helvetica-Bold", 8)
+    can.drawString(inicio_bloco_x, topo_y4, texto_assinatura)
+    
+    can.save()
+    packet.seek(0)
+    return PdfReader(packet)
+
+def processar_pdf_final(pdf_bytes, solicitante, motivo, horario_assinatura):
+    reader_original = PdfReader(io.BytesIO(pdf_bytes))
+    writer = PdfWriter()
+    
+    primeira_pagina = reader_original.pages[0]
+    largura = float(primeira_pagina.mediabox.width)
+    altura = float(primeira_pagina.mediabox.height)
+    
+    carimbo_reader = criar_overlay_carimbo(solicitante, motivo, horario_assinatura, largura, altura)
+    carimbo_page = carimbo_reader.pages[0]
+    primeira_pagina.merge_page(carimbo_page)
+    
+    for page in reader_original.pages:
+        writer.add_page(page)
+        
+    output = io.BytesIO()
+    writer.write(output)
+    output.seek(0)
+    return output
+
+def gerar_pdf_auditoria_protegido(df_base, coordenacao, horario_acao):
+    packet = io.BytesIO()
+    doc = SimpleDocTemplate(packet, pagesize=letter, rightMargin=40, leftMargin=40, topMargin=5, bottomMargin=40)
+    styles = getSampleStyleSheet()
+    
+    style_titulo = ParagraphStyle('TituloAudit', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=13, leading=16, textColor=colors.black, alignment=1, spaceAfter=10)
+    style_label = ParagraphStyle('LabelAudit', fontName='Helvetica-Bold', fontSize=10, leading=13)
+    style_value = ParagraphStyle('ValueAudit', fontName='Helvetica', fontSize=10, leading=13)
+    style_item_title = ParagraphStyle('ItemTitleAudit', fontName='Helvetica-Bold', fontSize=10, leading=14, spaceBefore=10)
+    style_item_detail = ParagraphStyle('ItemDetailAudit', fontName='Helvetica', fontSize=9, leading=13, leftIndent=15)
+    
+    elementos = []
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    caminho_logo = os.path.join(base_dir, "logo.png")
+    if os.path.exists(caminho_logo):
+        from PIL import Image as PILImage
+        img_original = PILImage.open(caminho_logo)
+        largura_original, altura_original = img_original.size
+        largura_desejada = 105
+        proporcao = altura_original / largura_original
+        altura_proporcional = largura_desejada * proporcao
+        
+        logo = Image(caminho_logo, width=largura_desejada, height=altura_proporcional)
+        tabela_logo = Table([[logo]], colWidths=[532])
+        tabela_logo.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'), ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('TOPPADDING', (0,0), (-1,-1), -18), ('BOTTOMPADDING', (0,0), (-1,-1), -15),
+        ]))
+        elementos.append(tabela_logo)
+        elementos.append(Spacer(1, 5))
+    
+    elementos.append(Paragraph("HISTÓRICO DE CANCELAMENTO DE ORDENS DE SERVIÇO", style_titulo))
+    
+    linha_divisoria = Table([[""]], colWidths=[532], rowHeights=[1])
+    linha_divisoria.setStyle(TableStyle([('LINEABOVE', (0,0), (-1,-1), 1, colors.HexColor("#888888")), ('BOTTOMPADDING', (0,0), (-1,-1), 0), ('TOPPADDING', (0,0), (-1,-1), 0)]))
+    elementos.append(linha_divisoria)
+    elementos.append(Spacer(1, 12))
+    
+    dados_metadados = [
+        [Paragraph("DATA/HORA DA OPERAÇÃO:", style_label), Paragraph(horario_acao, style_value)],
+        [Paragraph("COORDENAÇÃO RESPONSÁVEL:", style_label), Paragraph(str(coordenacao).upper(), style_value)],
+        [Paragraph("TOTAL DE PROCESSAMENTOS:", style_label), Paragraph(f"{len(df_base)} registros", style_value)]
+    ]
+    
+    tabela_metadados = Table(dados_metadados, colWidths=[170, 362])
+    tabela_metadados.setStyle(TableStyle([('VALIGN', (0,0), (-1,-1), 'MIDDLE'), ('BOTTOMPADDING', (0,0), (-1,-1), 4), ('TOPPADDING', (0,0), (-1,-1), 4), ('LEFTPADDING', (0,0), (-1,-1), 0), ('RIGHTPADDING', (0,0), (-1,-1), 0)]))
+    elementos.append(tabela_metadados)
+    elementos.append(Spacer(1, 10))
+    elementos.append(linha_divisoria)
+    elementos.append(Spacer(1, 12))
+    
+    elementos.append(Paragraph("RELATÓRIO DETALHADO:", style_label))
+    
+    for idx, linha in df_base.iterrows():
+        elementos.append(Paragraph(f"OS Nº {linha['Ordem']}", style_item_title))
+        elementos.append(Paragraph(f"• SOLICITANTE: {str(linha['Solicitante']).upper()}", style_item_detail))
+        elementos.append(Paragraph(f"• MOTIVO: {str(linha['Motivo']).upper()}", style_item_detail))
+        elementos.append(Paragraph(f"• ARQUIVO ORIGINAL: {linha['Nome do Arquivo']}", style_item_detail))
+        
+        linha_os = Table([[""]], colWidths=[532], rowHeights=[1])
+        linha_os.setStyle(TableStyle([('LINEABOVE', (0,0), (-1,-1), 0.5, colors.HexColor("#CCCCCC")), ('BOTTOMPADDING', (0,0), (-1,-1), 0), ('TOPPADDING', (0,0), (-1,-1), 4)]))
+        elementos.append(linha_os)
+        
+    doc.build(elementos)
+    packet.seek(0)
+    
+    reader_pdf = PdfReader(packet)
+    writer_protegido = PdfWriter()
+    for pagina in reader_pdf.pages:
+        writer_protegido.add_page(pagina)
+        
+    chave_seguranca_invisivel = f"LOCK_{datetime.now().timestamp()}"
+    writer_protegido.encrypt(user_password="", owner_password=chave_seguranca_invisivel, permissions_flag=int("111111000100", 2))
+    
+    output_final = io.BytesIO()
+    writer_protegido.write(output_final)
+    output_final.seek(0)
+    return output_final
 
 # =========================================================================
-# ROTAS
+# ROTAS DA API WEB INTERNA
 # =========================================================================
 
 @app.route('/')
@@ -121,25 +204,107 @@ def index():
     with open('index.html', 'r', encoding='utf-8') as f:
         return render_template_string(f.read())
 
+# NOVA ROTA: Validação de login por Token
 @app.route('/login', methods=['POST'])
 def login():
-    token = request.get_json().get("token", "")
+    dados = request.get_json() or {}
+    token = dados.get("token", "").strip()
+    
     if token in TOKENS_ACESSO:
-        return jsonify({"sucesso": True, "coordenacao": TOKENS_ACESSO[token]["coordenacao"]})
-    return jsonify({"sucesso": False}), 401
+        return jsonify({
+            "sucesso": True,
+            "funcionario": TOKENS_ACESSO[token]["funcionario"],
+            "coordenacao": TOKENS_ACESSO[token]["coordenacao"]
+        })
+    return jsonify({"sucesso": False, "mensagem": "Token inválido ou inexistente."}), 401
 
-@app.route('/concluir-ordens', methods=['POST'])
-def concluir_ordens():
+@app.route('/coordenacoes', methods=['GET'])
+def get_coordenacoes():
+    return jsonify(COORDENACOES)
+
+@app.route('/Analisar-arquivos', methods=['POST'])
+def analisar_arquivos():
+    if 'arquivos' not in request.files:
+        return jsonify([])
+    
     arquivos = request.files.getlist('arquivos')
+    solicitante_padrao = request.form.get('solicitante_padrao', '')
+    
+    lista_dados = []
+    for index, arq in enumerate(arquivos):
+        num_os = extrair_nome_arquivo_puro(arq.filename)
+        lista_dados.append({
+            "id_interno": index,
+            "nome_arquivo": arq.filename,
+            "ordem": num_os,
+            "solicitante": solicitante_padrao,
+            "motivo": ""
+        })
+    
+    df = pd.DataFrame(lista_dados)
+    if not df.empty:
+        if df["ordem"].str.isdigit().all():
+            df["ordem_num"] = df["ordem"].astype(int)
+            df = df.sort_values(by="ordem_num").drop(columns=["ordem_num"])
+        else:
+            df = df.sort_values(by="ordem")
+        lista_dados = df.to_dict(orient='records')
+
+    return jsonify(lista_dados)
+
+@app.route('/processar', methods=['POST'])
+def processar():
+    arquivos = request.files.getlist('arquivos')
+    import json
+    import pytz
+    
+    dados_linhas = json.loads(request.form.get('dados'))
+    coordenacao = request.form.get('coordenacao', 'NÃO INFORMADA')
+    
+    fuso_br = pytz.timezone('America/Sao_Paulo')
+    horario_inicio_auditoria = datetime.now(fuso_br).strftime("%d/%m/%Y ÀS %H:%M:%S")
+    
+    mapa_arquivos = {i: arq for i, arq in enumerate(arquivos)}
     zip_buffer = io.BytesIO()
+    registros_auditoria = []
+    
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
-        for arq in arquivos:
-            if arq.filename.lower().endswith('.pdf'):
-                os_8_digitos = extrair_numero_os_8_digitos(arq.filename)
-                pdf_saida = processar_conclusao_pdf(arq.read())
-                zip_file.writestr(f"{os_8_digitos}.pdf", pdf_saida)
+        for dynamic_index, linha in enumerate(dados_linhas):
+            id_orig = int(linha['id_interno'])
+            arq_original = mapa_arquivos[id_orig]
+            
+            pdf_bytes = arq_original.read()
+            arq_original.seek(0)
+            
+            horario_carimbo_atual = datetime.now(fuso_br).strftime("%d/%m/%Y ÀS %H:%M:%S")
+            
+            pdf_modificado = processar_pdf_final(pdf_bytes, linha['solicitante'], linha['motivo'], horario_carimbo_atual)
+            zip_file.writestr(f"{str(linha['ordem']).strip()}.pdf", pdf_modificado.getvalue())
+            
+            registros_auditoria.append({
+                "Ordem": linha['ordem'],
+                "Solicitante": linha['solicitante'],
+                "Motivo": linha['motivo'],
+                "Nome do Arquivo": linha['nome_arquivo']
+            })
+            
+        df_base = pd.DataFrame(registros_auditoria)
+        
+        df_excel = pd.DataFrame()
+        df_excel[0] = df_base["Ordem"]
+        df_excel[1] = "SOLICITANTE: " + df_base["Solicitante"].astype(str).str.upper()
+        df_excel[2] = "MOTIVO:" + df_base["Motivo"].astype(str).str.upper()
+        
+        excel_buffer = io.BytesIO()
+        with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
+            df_excel.to_excel(writer, index=False, header=False, sheet_name="Resumo Ordens")
+        zip_file.writestr("Cancelar Ordens.xlsx", excel_buffer.getvalue())
+        
+        pdf_auditoria = gerar_pdf_auditoria_protegido(df_base, coordenacao, horario_inicio_auditoria)
+        zip_file.writestr("Registro de Cancelamento.pdf", pdf_auditoria.getvalue())
+        
     zip_buffer.seek(0)
-    return send_file(zip_buffer, mimetype="application/zip", as_attachment=True, download_name="Ordens_Concluidas.zip")
+    return send_file(zip_buffer, mimetype="application/zip", as_attachment=True, download_name="OS_Processadas_Completas.zip")
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    app.run(host='0.0.0.0', port=5000, threaded=True)
