@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conclusão de O.S. - Portal Corporativo</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+        /* Área de drop melhorada */
+        .drop-zone { 
+            border: 2px dashed #cbd5e1; 
+            transition: all 0.3s; 
+            position: relative;
+        }
+        .drop-zone.active { 
+            border-color: #2563eb; 
+            background-color: #eff6ff; 
+            transform: scale(1.01);
+        }
+        /* Input invisível mas funcional cobrindo toda a área */
+        #input-files {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body class="p-6 max-w-4xl mx-auto text-slate-800">
+
+    <!-- Tela de Login -->
+    <section id="tela-login" class="max-w-md mx-auto mt-20 bg-white p-8 rounded-2xl shadow-xl border border-slate-200">
+        <div class="text-center mb-8">
+            <div class="bg-blue-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                <svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path>
+                </svg>
+            </div>
+            <h2 class="text-2xl font-bold text-slate-800">Acesso Restrito</h2>
+            <p class="text-slate-500 text-sm">Insira seu token para acessar o sistema</p>
+        </div>
+        
+        <div class="space-y-4">
+            <input type="password" id="input-token" placeholder="Token de segurança" class="w-full border border-slate-300 rounded-xl p-3 focus:ring-2 focus:ring-blue-500 outline-none transition text-center font-mono">
+            <p id="erro-login" class="text-red-500 text-xs text-center hidden">Token inválido ou expirado.</p>
+            <button id="btn-login" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl transition cursor-pointer">Entrar no Sistema</button>
+        </div>
+    </section>
+
+    <!-- Tela do Sistema Principal -->
+    <main id="sistema" class="hidden">
+        <header class="flex justify-between items-center mb-10 bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+            <div>
+                <h1 class="text-2xl font-bold text-slate-900">Sistema de Concluir O.S</h1>
+                <p class="text-slate-500 text-sm">Setor Autenticado: <span id="setor-label" class="font-bold text-blue-600">---</span></p>
+            </div>
+            <button id="btn-logout" class="text-slate-400 hover:text-red-500 transition font-medium cursor-pointer">Sair</button>
+        </header>
+
+        <section class="bg-white p-8 rounded-3xl shadow-sm border border-slate-200">
+            <h2 class="text-lg font-semibold text-slate-800 mb-4">Arraste os arquivos PDFs originais</h2>
+            
+            <div id="drop-area" class="drop-zone rounded-2xl p-12 text-center mb-6">
+                <!-- O input agora fica por cima de tudo para garantir captura do clique/drop -->
+                <input type="file" id="input-files" multiple accept=".pdf">
+                
+                <div class="space-y-4">
+                    <svg class="w-12 h-12 text-slate-400 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                    </svg>
+                    <p class="text-slate-600 font-medium">Arraste seus PDFs aqui ou <span class="text-blue-600">clique nesta área</span></p>
+                    <p id="file-count" class="text-xs text-slate-400">Nenhum arquivo anexado</p>
+                </div>
+            </div>
+
+            <!-- Lista de Arquivos Carregados -->
+            <div id="lista-arquivos-container" class="hidden mb-6">
+                <h3 class="text-sm font-semibold text-slate-700 mb-2">Arquivos prontos para carimbar:</h3>
+                <div id="lista-arquivos" class="bg-slate-50 rounded-xl p-4 max-h-52 overflow-y-auto border border-slate-200 space-y-1"></div>
+            </div>
+
+            <button id="btn-gerar" disabled class="w-full bg-slate-200 text-slate-500 font-bold py-4 rounded-2xl transition flex items-center justify-center gap-3 cursor-not-allowed">
+                <span>Gerar Ordens Carimbadas</span>
+            </button>
+        </section>
+    </main>
+
+    <script>
+        const btnLogin = document.getElementById('btn-login');
+        const sistema = document.getElementById('sistema');
+        const telaLogin = document.getElementById('tela-login');
+        const dropArea = document.getElementById('drop-area');
+        const inputFile = document.getElementById('input-files');
+        const btnGerar = document.getElementById('btn-gerar');
+        const listaArquivos = document.getElementById('lista-arquivos');
+        const listaContainer = document.getElementById('lista-arquivos-container');
+
+        let arquivosSelecionados = [];
+
+        // LOGIN
+        btnLogin.addEventListener('click', async () => {
+            const token = document.getElementById('input-token').value;
+            const res = await fetch('/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({token})
+            });
+
+            if(res.ok) {
+                const data = await res.json();
+                document.getElementById('setor-label').innerText = data.coordenacao;
+                telaLogin.classList.add('hidden');
+                sistema.classList.remove('hidden');
+            } else {
+                document.getElementById('erro-login').classList.remove('hidden');
+            }
+        });
+
+        // EFEITOS VISUAIS DO DRAG AND DROP
+        ['dragenter', 'dragover'].forEach(evt => {
+            dropArea.addEventListener(evt, () => dropArea.classList.add('active'));
+        });
+
+        ['dragleave', 'drop'].forEach(evt => {
+            dropArea.addEventListener(evt, () => dropArea.classList.remove('active'));
+        });
+
+        // CAPTURA DOS ARQUIVOS
+        inputFile.addEventListener('change', e => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            // CORREÇÃO AQUI: .endsWith com W maiúsculo
+            const pdfs = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.pdf'));
+            
+            if (pdfs.length === 0 && files.length > 0) {
+                alert("Por favor, selecione apenas arquivos PDF.");
+                return;
+            }
+
+            arquivosSelecionados = pdfs;
+            document.getElementById('file-count').innerText = `${arquivosSelecionados.length} arquivo(s) selecionado(s).`;
+            
+            listaArquivos.innerHTML = '';
+            if(arquivosSelecionados.length > 0) {
+                listaContainer.classList.remove('hidden');
+                arquivosSelecionados.forEach(f => {
+                    const item = document.createElement('div');
+                    item.className = "text-xs text-slate-600 flex items-center justify-between py-1.5 border-b border-slate-200 last:border-b-0";
+                    item.innerHTML = `<span>📄 ${f.name}</span> <span class="text-slate-400 font-mono">${(f.size/1024).toFixed(1)} KB</span>`;
+                    listaArquivos.appendChild(item);
+                });
+
+                btnGerar.disabled = false;
+                btnGerar.className = "w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl transition flex items-center justify-center gap-3 cursor-pointer shadow-lg shadow-blue-200";
+            }
+        }
+
+        // ENVIAR PARA O SERVIDOR
+        btnGerar.addEventListener('click', async () => {
+            const originalText = btnGerar.innerHTML;
+            btnGerar.innerText = "Processando arquivos...";
+            btnGerar.disabled = true;
+
+            const formData = new FormData();
+            arquivosSelecionados.forEach(file => formData.append('arquivos', file));
+
+            try {
+                const res = await fetch('/concluir-ordens', { method: 'POST', body: formData });
+                
+                if(res.ok) {
+                    const blob = await res.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = "Ordens_Concluidas.zip";
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    
+                    // Reset após sucesso
+                    arquivosSelecionados = [];
+                    inputFile.value = "";
+                    handleFiles([]);
+                    document.getElementById('file-count').innerText = "Download concluído com sucesso!";
+                } else {
+                    alert("Erro no servidor ao processar.");
+                }
+            } catch (err) {
+                alert("Erro de conexão.");
+            } finally {
+                btnGerar.innerHTML = originalText;
+                btnGerar.disabled = false;
+            }
+        });
+
+        document.getElementById('btn-logout').addEventListener('click', () => location.reload());
+    </script>
+</body>
+</html>
